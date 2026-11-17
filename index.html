@@ -1,0 +1,728 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+    <meta charset="UTF-8">
+    <!-- 行動端 Viewport 嚴格鎖定與全螢幕安全區域適配 -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="theme-color" content="#0f172a">
+    <title>極簡呼吸放鬆工具</title>
+    <!-- 引入 Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <!-- 引入 Noto Sans TC 字體 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@300;400;500&display=swap" rel="stylesheet">
+
+    <style>
+        /* 全域行動端觸控與防止誤選優化 */
+        * {
+            box-sizing: border-box;
+            -webkit-tap-highlight-color: transparent;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        html, body {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            height: 100dvh;
+            background-color: #0f172a;
+            color: #f8fafc;
+            font-family: 'Noto Sans TC', -apple-system, BlinkMacSystemFont, sans-serif;
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            align-items: center;
+            /* 安全區域邊距適配 */
+            padding-top: env(safe-area-inset-top, 16px);
+            padding-bottom: env(safe-area-inset-bottom, 20px);
+            padding-left: env(safe-area-inset-left, 16px);
+            padding-right: env(safe-area-inset-right, 16px);
+        }
+
+        /* 模式切換膠囊按鈕列 */
+        .mode-pill {
+            transition: all 0.25s cubic-bezier(0.4, 0, 0.2, 1);
+            touch-action: manipulation;
+        }
+        .mode-pill:active {
+            transform: scale(0.92);
+        }
+        .mode-pill.active {
+            background: rgba(56, 189, 248, 0.18);
+            border-color: rgba(125, 211, 252, 0.55);
+            color: #e0f2fe;
+            box-shadow: 0 0 15px rgba(56, 189, 248, 0.2);
+        }
+
+        /* 功能圖示按鈕 (音效 / 震動) */
+        .icon-btn {
+            transition: transform 0.15s ease, background-color 0.2s ease, color 0.2s ease;
+            touch-action: manipulation;
+        }
+        .icon-btn:active {
+            transform: scale(0.88);
+        }
+
+        /* 核心呼吸舞台容器 */
+        .breathing-stage {
+            position: relative;
+            width: min(82vw, 330px);
+            height: min(82vw, 330px);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+        }
+
+        /* SVG 光暈層平滑濾鏡 */
+        .svg-glow-wrapper {
+            width: 100%;
+            height: 100%;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            will-change: transform;
+        }
+
+        /* 動態漸層光暈背景 */
+        .ambient-backdrop {
+            position: absolute;
+            width: 65%;
+            height: 65%;
+            border-radius: 50%;
+            filter: blur(36px);
+            opacity: 0.45;
+            transition: background-color 1.2s ease, transform 0.1s linear;
+            pointer-events: none;
+            z-index: 0;
+        }
+
+        /* SVG 圓環顏色平滑過渡 */
+        .ring-stroke-transition {
+            transition: stroke 1.2s ease, opacity 0.8s ease;
+        }
+
+        /* 中央文字狀態區 */
+        .center-info {
+            position: absolute;
+            z-index: 10;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            pointer-events: none;
+            text-align: center;
+        }
+
+        .phase-label {
+            font-size: 1.35rem;
+            font-weight: 400;
+            letter-spacing: 0.18em;
+            padding-left: 0.18em;
+            color: #f8fafc;
+            text-shadow: 0 2px 12px rgba(15, 23, 42, 0.8);
+            transition: opacity 0.25s ease, transform 0.25s ease;
+        }
+
+        .phase-timer {
+            font-size: 0.85rem;
+            font-weight: 300;
+            letter-spacing: 0.1em;
+            color: rgba(226, 232, 240, 0.75);
+            margin-top: 4px;
+            font-variant-numeric: tabular-nums;
+        }
+
+        /* 主控制按鈕 */
+        .main-btn {
+            background: linear-gradient(135deg, rgba(30, 41, 59, 0.9), rgba(15, 23, 42, 0.95));
+            border: 1px solid rgba(148, 163, 184, 0.3);
+            color: #f1f5f9;
+            padding: 15px 44px;
+            border-radius: 9999px;
+            font-size: 1rem;
+            font-weight: 400;
+            letter-spacing: 0.12em;
+            box-shadow: 0 8px 25px rgba(0, 0, 0, 0.35), inset 0 1px 1px rgba(255, 255, 255, 0.08);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            transition: transform 0.15s cubic-bezier(0.4, 0, 0.2, 1), border-color 0.25s ease, color 0.25s ease, box-shadow 0.25s ease;
+            touch-action: manipulation;
+        }
+
+        .main-btn:active {
+            transform: scale(0.93);
+            border-color: rgba(125, 211, 252, 0.6);
+        }
+
+        .main-btn.running {
+            border-color: rgba(148, 163, 184, 0.2);
+            color: #94a3b8;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.2);
+        }
+    </style>
+</head>
+<body>
+
+    <!-- 頂部控制列：標題與音效/震動開關 -->
+    <header class="w-full max-w-md flex flex-col items-center pt-3 px-4 z-20">
+        <div class="w-full flex justify-between items-center mb-4">
+            <!-- 震動回饋切換鈕 -->
+            <button id="hapticToggle" type="button" aria-label="切換震動回饋"
+                class="icon-btn w-10 h-10 rounded-full bg-slate-800/60 border border-slate-700/60 flex items-center justify-center text-sky-400">
+                <svg id="hapticIcon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M10.5 1.5H8.25A2.25 2.25 0 006 3.75v16.5a2.25 2.25 0 002.25 2.25h7.5A2.25 2.25 0 0018 20.25V3.75a2.25 2.25 0 00-2.25-2.25H13.5m-3 0V3h3V1.5m-3 0h3m-3 18.75h3" />
+                </svg>
+            </button>
+
+            <div class="text-center">
+                <h1 class="text-base font-normal tracking-[0.22em] text-slate-200 pl-[0.22em]">靜心呼吸</h1>
+                <p id="wakeLockBadge" class="text-[10px] tracking-widest text-slate-500 mt-0.5 transition-opacity duration-300">
+                    選擇呼吸節奏
+                </p>
+            </div>
+
+            <!-- Web Audio 合成音效切換鈕 -->
+            <button id="soundToggle" type="button" aria-label="切換引導音效"
+                class="icon-btn w-10 h-10 rounded-full bg-slate-800/60 border border-slate-700/60 flex items-center justify-center text-sky-400">
+                <svg id="soundOnIcon" class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M19.114 5.636a9 9 0 010 12.728M16.463 8.288a5.25 5.25 0 010 7.424M6.75 8.25l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                </svg>
+                <svg id="soundOffIcon" class="w-5 h-5 hidden text-slate-500" fill="none" stroke="currentColor" stroke-width="1.75" viewBox="0 0 24 24">
+                    <path stroke-linecap="round" stroke-linejoin="round" d="M17.25 9.75L19.5 12m0 0l2.25 2.25M19.5 12l2.25-2.25M19.5 12l-2.25 2.25m-10.5-6l4.72-4.72a.75.75 0 011.28.53v15.88a.75.75 0 01-1.28.53l-4.72-4.72H4.51c-.88 0-1.704-.507-1.938-1.354A9.01 9.01 0 012.25 12c0-.83.112-1.633.322-2.396C2.806 8.756 3.63 8.25 4.51 8.25H6.75z" />
+                </svg>
+            </button>
+        </div>
+
+        <!-- 呼吸模式選擇器 -->
+        <div id="modeSelector" class="flex items-center justify-center gap-2 w-full">
+            <button type="button" data-mode="equal"
+                class="mode-pill active px-3.5 py-1.5 rounded-full text-xs font-light tracking-wider border border-slate-700/70 bg-slate-800/40 text-slate-400">
+                4-4 基礎
+            </button>
+            <button type="button" data-mode="relax"
+                class="mode-pill px-3.5 py-1.5 rounded-full text-xs font-light tracking-wider border border-slate-700/70 bg-slate-800/40 text-slate-400">
+                4-7-8 放鬆
+            </button>
+            <button type="button" data-mode="box"
+                class="mode-pill px-3.5 py-1.5 rounded-full text-xs font-light tracking-wider border border-slate-700/70 bg-slate-800/40 text-slate-400">
+                4-4-4-4 箱式
+            </button>
+        </div>
+    </header>
+
+    <!-- 中央核心 SVG 多層漸層光暈舞台 -->
+    <main class="flex-1 flex flex-col justify-center items-center w-full relative">
+        <div class="breathing-stage">
+            <!-- 柔光環境背景 -->
+            <div id="ambientBackdrop" class="ambient-backdrop" style="background-color: rgba(56, 189, 248, 0.35);"></div>
+
+            <!-- 多層 SVG 動態光暈圓環 -->
+            <div id="svgScaleContainer" class="svg-glow-wrapper" style="transform: scale(0.62);">
+                <svg viewBox="0 0 300 300" class="w-full h-full overflow-visible">
+                    <defs>
+                        <!-- 動態漸層定義 (透過 JS 平滑更新顏色) -->
+                        <linearGradient id="breathGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+                            <stop id="gradStop1" offset="0%" stop-color="#38bdf8" stop-opacity="0.85" />
+                            <stop id="gradStop2" offset="100%" stop-color="#0284c7" stop-opacity="0.35" />
+                        </linearGradient>
+
+                        <radialGradient id="coreRadial" cx="50%" cy="50%" r="50%">
+                            <stop id="radialStop1" offset="0%" stop-color="#38bdf8" stop-opacity="0.28" />
+                            <stop id="radialStop2" offset="75%" stop-color="#0ea5e9" stop-opacity="0.12" />
+                            <stop offset="100%" stop-color="#0f172a" stop-opacity="0" />
+                        </radialGradient>
+
+                        <!-- 柔和外發光濾鏡 -->
+                        <filter id="softGlow" x="-30%" y="-30%" width="160%" height="160%">
+                            <feGaussianBlur stdDeviation="6" result="blur" />
+                            <feComposite in="SourceGraphic" in2="blur" operator="over" />
+                        </filter>
+                    </defs>
+
+                    <!-- 第 1 層：最外圈大範圍擴散光暈環 -->
+                    <circle cx="150" cy="150" r="136" fill="none" stroke="url(#breathGradient)" stroke-width="1" stroke-opacity="0.25" />
+
+                    <!-- 第 2 層：中層呼吸節奏波紋環 -->
+                    <circle id="outerPulseRing" cx="150" cy="150" r="122" fill="none" stroke="url(#breathGradient)" stroke-width="1.5" stroke-opacity="0.45" stroke-dasharray="4 6" />
+
+                    <!-- 第 3 層：核心實心漸層光球 -->
+                    <circle cx="150" cy="150" r="110" fill="url(#coreRadial)" />
+
+                    <!-- 第 4 層：主發光邊界圓環 -->
+                    <circle cx="150" cy="150" r="110" fill="none" stroke="url(#breathGradient)" stroke-width="2.5" filter="url(#softGlow)" />
+
+                    <!-- 第 5 層：階段進度弧線指示環 -->
+                    <circle id="progressArc" cx="150" cy="150" r="102" fill="none" stroke="#f8fafc" stroke-width="1.5"
+                        stroke-opacity="0.35" stroke-linecap="round"
+                        stroke-dasharray="640.88" stroke-dashoffset="640.88"
+                        transform="rotate(-90 150 150)" />
+                </svg>
+            </div>
+
+            <!-- 中央動態文字與秒數 -->
+            <div class="center-info" aria-live="polite">
+                <span id="phaseLabel" class="phase-label">準備</span>
+                <span id="phaseTimer" class="phase-timer">4秒吸氣 · 4秒呼氣</span>
+            </div>
+        </div>
+    </main>
+
+    <!-- 底部操作區 -->
+    <footer class="w-full flex flex-col items-center pb-6 px-6 z-20">
+        <button id="toggleBtn" type="button" class="main-btn">
+            開始呼吸
+        </button>
+        <p id="cycleCounter" class="text-[11px] font-light tracking-widest text-slate-500 mt-3 h-4">
+            <!-- 顯示已完成循環次數 -->
+        </p>
+    </footer>
+
+    <script>
+        (function () {
+            // ==========================================
+            // 1. 呼吸模式與色彩主題配置
+            // ==========================================
+            const BREATH_MODES = {
+                equal: {
+                    name: '4-4 基礎',
+                    desc: '4秒吸氣 · 4秒呼氣',
+                    phases: [
+                        { type: 'inhale', label: '吸氣...', duration: 4000, startScale: 0.62, endScale: 1.0, freq: 396 },
+                        { type: 'exhale', label: '呼氣...', duration: 4000, startScale: 1.0, endScale: 0.62, freq: 285 }
+                    ]
+                },
+                relax: {
+                    name: '4-7-8 放鬆',
+                    desc: '4秒吸氣 · 7秒屏息 · 8秒呼氣',
+                    phases: [
+                        { type: 'inhale', label: '吸氣...', duration: 4000, startScale: 0.62, endScale: 1.0, freq: 396 },
+                        { type: 'hold',   label: '屏息...', duration: 7000, startScale: 1.0, endScale: 1.03, freq: 528 },
+                        { type: 'exhale', label: '呼氣...', duration: 8000, startScale: 1.03, endScale: 0.62, freq: 285 }
+                    ]
+                },
+                box: {
+                    name: '4-4-4-4 箱式',
+                    desc: '吸氣 · 屏息 · 呼氣 · 屏息 (各4秒)',
+                    phases: [
+                        { type: 'inhale',     label: '吸氣...', duration: 4000, startScale: 0.62, endScale: 1.0, freq: 396 },
+                        { type: 'hold',       label: '屏息...', duration: 4000, startScale: 1.0, endScale: 1.02, freq: 528 },
+                        { type: 'exhale',     label: '呼氣...', duration: 4000, startScale: 1.02, endScale: 0.62, freq: 285 },
+                        { type: 'holdEmpty',  label: '屏息...', duration: 4000, startScale: 0.62, endScale: 0.60, freq: 396 }
+                    ]
+                }
+            };
+
+            // 階段對應色彩主題 (Cyan 吸氣 / Indigo 屏息 / Rose-Violet 呼氣)
+            const PHASE_THEMES = {
+                inhale: {
+                    c1: [56, 189, 248],   // Cyan-400 (#38bdf8)
+                    c2: [2, 132, 199],    // Sky-600 (#0284c7)
+                    backdrop: 'rgba(56, 189, 248, 0.35)'
+                },
+                hold: {
+                    c1: [129, 140, 248],  // Indigo-400 (#818cf8)
+                    c2: [79, 70, 229],    // Indigo-600 (#4f46e5)
+                    backdrop: 'rgba(129, 140, 248, 0.35)'
+                },
+                exhale: {
+                    c1: [244, 114, 182],  // Pink/Rose-400 (#f472b6)
+                    c2: [168, 85, 247],   // Purple/Violet-500 (#a855f7)
+                    backdrop: 'rgba(217, 70, 239, 0.30)'
+                },
+                holdEmpty: {
+                    c1: [99, 102, 241],   // Indigo-500 (#6366f1)
+                    c2: [56, 189, 248],   // Cyan-400 (#38bdf8)
+                    backdrop: 'rgba(99, 102, 241, 0.28)'
+                }
+            };
+
+            // ==========================================
+            // 2. DOM 元素與狀態變數
+            // ==========================================
+            const svgScaleContainer = document.getElementById('svgScaleContainer');
+            const ambientBackdrop = document.getElementById('ambientBackdrop');
+            const gradStop1 = document.getElementById('gradStop1');
+            const gradStop2 = document.getElementById('gradStop2');
+            const radialStop1 = document.getElementById('radialStop1');
+            const radialStop2 = document.getElementById('radialStop2');
+            const progressArc = document.getElementById('progressArc');
+            const outerPulseRing = document.getElementById('outerPulseRing');
+            const phaseLabel = document.getElementById('phaseLabel');
+            const phaseTimer = document.getElementById('phaseTimer');
+            const toggleBtn = document.getElementById('toggleBtn');
+            const cycleCounter = document.getElementById('cycleCounter');
+            const modeButtons = document.querySelectorAll('.mode-pill');
+            const soundToggle = document.getElementById('soundToggle');
+            const soundOnIcon = document.getElementById('soundOnIcon');
+            const soundOffIcon = document.getElementById('soundOffIcon');
+            const hapticToggle = document.getElementById('hapticToggle');
+            const wakeLockBadge = document.getElementById('wakeLockBadge');
+
+            const ARC_CIRCUMFERENCE = 2 * Math.PI * 102; // 640.88
+
+            let currentModeKey = 'equal';
+            let isRunning = false;
+            let animationFrameId = null;
+            let phaseIndex = 0;
+            let phaseStartTime = 0;
+            let completedCycles = 0;
+
+            // 偏好設定狀態
+            let soundEnabled = true;
+            let hapticEnabled = true;
+
+            // Web Audio 與 WakeLock 實例
+            let audioCtx = null;
+            let wakeLock = null;
+
+            // 當前色彩插值狀態
+            let currentRGB1 = [...PHASE_THEMES.inhale.c1];
+            let currentRGB2 = [...PHASE_THEMES.inhale.c2];
+            let targetRGB1 = [...PHASE_THEMES.inhale.c1];
+            let targetRGB2 = [...PHASE_THEMES.inhale.c2];
+
+            // ==========================================
+            // 3. Web Audio API 柔和合成音效引擎
+            // ==========================================
+            function initAudio() {
+                if (!audioCtx) {
+                    const AudioContext = window.AudioContext || window.webkitAudioContext;
+                    if (AudioContext) {
+                        audioCtx = new AudioContext();
+                    }
+                }
+                if (audioCtx && audioCtx.state === 'suspended') {
+                    audioCtx.resume();
+                }
+            }
+
+            /**
+             * 播放柔和的頌缽/正弦波提示音
+             * @param {number} baseFreq - 基礎頻率 (Hz)
+             */
+            function playPhaseTone(baseFreq) {
+                if (!soundEnabled) return;
+                initAudio();
+                if (!audioCtx) return;
+
+                try {
+                    const now = audioCtx.currentTime;
+                    
+                    // 主音振盪器 (溫暖正弦波)
+                    const osc1 = audioCtx.createOscillator();
+                    // 泛音振盪器 (八度音增添空氣感)
+                    const osc2 = audioCtx.createOscillator();
+                    const gainNode = audioCtx.createGain();
+
+                    osc1.type = 'sine';
+                    osc1.frequency.setValueAtTime(baseFreq, now);
+
+                    osc2.type = 'sine';
+                    osc2.frequency.setValueAtTime(baseFreq * 1.5, now); // 五度泛音
+
+                    const subGain = audioCtx.createGain();
+                    subGain.gain.setValueAtTime(0.18, now); // 泛音音量較輕
+
+                    // 柔和包絡線 (Attack -> Decay -> Release)
+                    gainNode.gain.setValueAtTime(0.0001, now);
+                    gainNode.gain.exponentialRampToValueAtTime(0.08, now + 0.18);
+                    gainNode.gain.exponentialRampToValueAtTime(0.0001, now + 1.6);
+
+                    osc1.connect(gainNode);
+                    osc2.connect(subGain);
+                    subGain.connect(gainNode);
+                    gainNode.connect(audioCtx.destination);
+
+                    osc1.start(now);
+                    osc2.start(now);
+                    osc1.stop(now + 1.65);
+                    osc2.stop(now + 1.65);
+                } catch (e) {
+                    // 忽略音訊播放例外
+                }
+            }
+
+            // ==========================================
+            // 4. 行動端觸覺震動回饋
+            // ==========================================
+            function triggerHaptic(type) {
+                if (!hapticEnabled || !navigator.vibrate) return;
+                try {
+                    if (type === 'inhale') {
+                        navigator.vibrate([15, 40, 20]); // 雙重輕微脈衝提示吸氣
+                    } else if (type === 'hold' || type === 'holdEmpty') {
+                        navigator.vibrate(12); // 單次短震提示屏息
+                    } else {
+                        navigator.vibrate(25); // 柔和長震提示呼氣
+                    }
+                } catch (e) {}
+            }
+
+            // ==========================================
+            // 5. Screen Wake Lock 防止螢幕休眠
+            // ==========================================
+            async function requestWakeLock() {
+                if ('wakeLock' in navigator) {
+                    try {
+                        wakeLock = await navigator.wakeLock.request('screen');
+                        wakeLockBadge.textContent = '螢幕常亮已啟用';
+                        wakeLock.addEventListener('release', () => {
+                            wakeLock = null;
+                        });
+                    } catch (err) {
+                        // 低電量模式或瀏覽器不允許時靜默處理
+                    }
+                }
+            }
+
+            function releaseWakeLock() {
+                if (wakeLock) {
+                    try {
+                        wakeLock.release();
+                        wakeLock = null;
+                    } catch (e) {}
+                }
+                wakeLockBadge.textContent = '選擇呼吸節奏';
+            }
+
+            // ==========================================
+            // 6. 高精度動畫迴圈與色彩平滑渲染
+            // ==========================================
+            // 緩動函數：模擬自然有機的呼吸加減速 (EaseInOutSine)
+            function easeInOutSine(t) {
+                return -(Math.cos(Math.PI * t) - 1) / 2;
+            }
+
+            function lerp(start, end, amt) {
+                return start + (end - start) * amt;
+            }
+
+            function updateColorsSmoothly() {
+                // 每幀以 0.04 的比例向目標色過渡，實現絲滑漸層切換
+                for (let i = 0; i < 3; i++) {
+                    currentRGB1[i] = lerp(currentRGB1[i], targetRGB1[i], 0.04);
+                    currentRGB2[i] = lerp(currentRGB2[i], targetRGB2[i], 0.04);
+                }
+
+                const c1Str = `rgb(${Math.round(currentRGB1[0])}, ${Math.round(currentRGB1[1])}, ${Math.round(currentRGB1[2])})`;
+                const c2Str = `rgb(${Math.round(currentRGB2[0])}, ${Math.round(currentRGB2[1])}, ${Math.round(currentRGB2[2])})`;
+
+                gradStop1.setAttribute('stop-color', c1Str);
+                gradStop2.setAttribute('stop-color', c2Str);
+                radialStop1.setAttribute('stop-color', c1Str);
+                radialStop2.setAttribute('stop-color', c2Str);
+            }
+
+            function enterPhase(index) {
+                const mode = BREATH_MODES[currentModeKey];
+                phaseIndex = index % mode.phases.length;
+                const phase = mode.phases[phaseIndex];
+                phaseStartTime = performance.now();
+
+                // 更新文字標籤
+                phaseLabel.style.opacity = '0';
+                setTimeout(() => {
+                    if (isRunning) {
+                        phaseLabel.textContent = phase.label;
+                        phaseLabel.style.opacity = '1';
+                    }
+                }, 120);
+
+                // 設定目標色彩主題
+                const theme = PHASE_THEMES[phase.type] || PHASE_THEMES.inhale;
+                targetRGB1 = [...theme.c1];
+                targetRGB2 = [...theme.c2];
+                ambientBackdrop.style.backgroundColor = theme.backdrop;
+
+                // 觸發音效與震動
+                playPhaseTone(phase.freq);
+                triggerHaptic(phase.type);
+            }
+
+            function animationLoop(now) {
+                if (!isRunning) return;
+
+                const mode = BREATH_MODES[currentModeKey];
+                const phase = mode.phases[phaseIndex];
+                const elapsed = now - phaseStartTime;
+                const rawProgress = Math.min(elapsed / phase.duration, 1);
+
+                // 計算平滑縮放比例
+                const easedProgress = easeInOutSine(rawProgress);
+                const currentScale = lerp(phase.startScale, phase.endScale, easedProgress);
+
+                // 套用縮放至 SVG 與背景光暈
+                svgScaleContainer.style.transform = `scale(${currentScale.toFixed(4)})`;
+                ambientBackdrop.style.transform = `scale(${(currentScale * 1.15).toFixed(4)})`;
+
+                // 外圈虛線環緩慢旋轉增加靈動感
+                const rotation = (now * 0.015) % 360;
+                outerPulseRing.setAttribute('transform', `rotate(${rotation.toFixed(1)} 150 150)`);
+
+                // 更新階段進度弧線
+                const dashOffset = ARC_CIRCUMFERENCE * (1 - rawProgress);
+                progressArc.setAttribute('stroke-dashoffset', dashOffset.toFixed(2));
+
+                // 更新剩餘秒數倒數 (顯示 1 位小數或整數倒數)
+                const remainingSec = Math.ceil((phase.duration - elapsed) / 1000);
+                phaseTimer.textContent = `${Math.max(1, remainingSec)} 秒`;
+
+                // 平滑更新漸層色彩
+                updateColorsSmoothly();
+
+                // 檢查是否進入下一階段
+                if (rawProgress >= 1) {
+                    const nextIndex = phaseIndex + 1;
+                    if (nextIndex >= mode.phases.length) {
+                        completedCycles++;
+                        cycleCounter.textContent = `已完成 ${completedCycles} 次深呼吸循環`;
+                    }
+                    enterPhase(nextIndex);
+                }
+
+                animationFrameId = requestAnimationFrame(animationLoop);
+            }
+
+            // ==========================================
+            // 7. 啟動、暫停與重置控制
+            // ==========================================
+            function startSession() {
+                initAudio();
+                isRunning = true;
+                completedCycles = 0;
+                cycleCounter.textContent = '跟隨光暈與提示音節奏';
+                toggleBtn.textContent = '暫停並重置';
+                toggleBtn.classList.add('running');
+
+                requestWakeLock();
+                enterPhase(0);
+                animationFrameId = requestAnimationFrame(animationLoop);
+            }
+
+            function stopAndResetSession() {
+                isRunning = false;
+                if (animationFrameId) {
+                    cancelAnimationFrame(animationFrameId);
+                    animationFrameId = null;
+                }
+
+                releaseWakeLock();
+
+                // 平滑恢復初始縮放與狀態
+                svgScaleContainer.style.transition = 'transform 0.65s cubic-bezier(0.22, 1, 0.36, 1)';
+                ambientBackdrop.style.transition = 'transform 0.65s ease, background-color 0.8s ease';
+                svgScaleContainer.style.transform = 'scale(0.62)';
+                ambientBackdrop.style.transform = 'scale(1)';
+                ambientBackdrop.style.backgroundColor = PHASE_THEMES.inhale.backdrop;
+
+                // 恢復初始青色光暈
+                targetRGB1 = [...PHASE_THEMES.inhale.c1];
+                targetRGB2 = [...PHASE_THEMES.inhale.c2];
+                currentRGB1 = [...PHASE_THEMES.inhale.c1];
+                currentRGB2 = [...PHASE_THEMES.inhale.c2];
+                updateColorsSmoothly();
+
+                // 重置進度環
+                progressArc.setAttribute('stroke-dashoffset', ARC_CIRCUMFERENCE.toFixed(2));
+
+                // 動畫結束後移除 transition 以免干擾下一輪 requestAnimationFrame
+                setTimeout(() => {
+                    if (!isRunning) {
+                        svgScaleContainer.style.transition = '';
+                        ambientBackdrop.style.transition = 'background-color 1.2s ease';
+                    }
+                }, 660);
+
+                // 重置文字與按鈕
+                const mode = BREATH_MODES[currentModeKey];
+                phaseLabel.style.opacity = '1';
+                phaseLabel.textContent = '準備';
+                phaseTimer.textContent = mode.desc;
+                toggleBtn.textContent = '開始呼吸';
+                toggleBtn.classList.remove('running');
+                cycleCounter.textContent = '';
+            }
+
+            // ==========================================
+            // 8. 事件監聽綁定
+            // ==========================================
+            toggleBtn.addEventListener('click', () => {
+                if (isRunning) {
+                    stopAndResetSession();
+                } else {
+                    startSession();
+                }
+            });
+
+            // 模式切換按鈕
+            modeButtons.forEach((btn) => {
+                btn.addEventListener('click', () => {
+                    const selectedMode = btn.getAttribute('data-mode');
+                    if (selectedMode === currentModeKey) return;
+
+                    currentModeKey = selectedMode;
+                    modeButtons.forEach((b) => b.classList.remove('active'));
+                    btn.classList.add('active');
+
+                    // 若正在運行中，立即重啟新模式；否則更新提示說明
+                    if (isRunning) {
+                        cancelAnimationFrame(animationFrameId);
+                        completedCycles = 0;
+                        cycleCounter.textContent = '跟隨光暈與提示音節奏';
+                        enterPhase(0);
+                        animationFrameId = requestAnimationFrame(animationLoop);
+                    } else {
+                        phaseTimer.textContent = BREATH_MODES[currentModeKey].desc;
+                    }
+
+                    if (hapticEnabled && navigator.vibrate) {
+                        try { navigator.vibrate(10); } catch (e) {}
+                    }
+                });
+            });
+
+            // 音效開關
+            soundToggle.addEventListener('click', () => {
+                soundEnabled = !soundEnabled;
+                if (soundEnabled) {
+                    initAudio();
+                    soundOnIcon.classList.remove('hidden');
+                    soundOffIcon.classList.add('hidden');
+                    soundToggle.classList.replace('text-slate-500', 'text-sky-400');
+                    playPhaseTone(528);
+                } else {
+                    soundOnIcon.classList.add('hidden');
+                    soundOffIcon.classList.remove('hidden');
+                    soundToggle.classList.replace('text-sky-400', 'text-slate-500');
+                }
+            });
+
+            // 震動開關
+            hapticToggle.addEventListener('click', () => {
+                hapticEnabled = !hapticEnabled;
+                if (hapticEnabled) {
+                    hapticToggle.classList.replace('text-slate-500', 'text-sky-400');
+                    if (navigator.vibrate) {
+                        try { navigator.vibrate(15); } catch (e) {}
+                    }
+                } else {
+                    hapticToggle.classList.replace('text-sky-400', 'text-slate-500');
+                }
+            });
+
+            // 頁面切換背景或返回前景時的處理
+            document.addEventListener('visibilitychange', () => {
+                if (document.hidden && isRunning) {
+                    stopAndResetSession();
+                }
+            });
+        })();
+    </script>
+</body>
+</html>
